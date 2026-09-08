@@ -1,0 +1,182 @@
+const { transporter, fromName, fromAddress } = require("../config/mail");
+
+class MailService {
+  /**
+   * Sends a general email.
+   * @param {Object} options - Email options
+   * @param {string} options.to - Recipient email
+   * @param {string} options.subject - Subject line
+   * @param {string} options.html - HTML body
+   * @param {Array} options.attachments - File attachments array
+   * @returns {Promise<Object|null>} Info object on success, null on failure
+   */
+  async sendMail({ to, subject, html, attachments = [] }) {
+    const mailOptions = {
+      from: `"${fromName}" <${fromAddress}>`,
+      to,
+      subject,
+      html,
+      attachments
+    };
+
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`Email sent successfully: ${info.messageId}`);
+      return info;
+    } catch (error) {
+      console.error(`Failed to send email to ${to}:`, error.message);
+      // Do not throw the error to prevent blocking execution workflows
+      return null;
+    }
+  }
+
+  /**
+   * Sends a welcome email to new admins.
+   * @param {string} to 
+   * @param {string} name 
+   */
+  async sendWelcomeEmail(to, name) {
+    const subject = "Welcome to Sumiraj!";
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+        <h2 style="color: #0056b3; text-align: center;">Welcome to Sumiraj, ${name}!</h2>
+        <p>Dear ${name},</p>
+        <p>Your administrator account has been successfully created. You now have full access to manage the Sumiraj platform.</p>
+        <p>If you have any questions or require system support, please contact your technical team.</p>
+        <br/>
+        <p>Best Regards,</p>
+        <p><strong>Sumiraj Team</strong></p>
+      </div>
+    `;
+    return this.sendMail({ to, subject, html });
+  }
+
+  /**
+   * Sends a forgot password request reset link.
+   * @param {string} to 
+   * @param {string} name 
+   * @param {string} resetUrl 
+   */
+  async sendForgotPasswordEmail(to, name, resetUrl) {
+    const subject = "Reset Password - Sumiraj";
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+        <h2 style="color: #d9534f; text-align: center;">Password Reset Request</h2>
+        <p>Dear ${name},</p>
+        <p>We received a request to reset your password for Sumiraj dashboard. Click the button below to choose a new password:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetUrl}" style="background-color: #0056b3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">Reset Password</a>
+        </div>
+        <p>This link is valid for 1 hour. If you did not make this request, you can safely ignore this email.</p>
+        <br/>
+        <p>Best Regards,</p>
+        <p><strong>Sumiraj Team</strong></p>
+      </div>
+    `;
+    return this.sendMail({ to, subject, html });
+  }
+
+  /**
+   * Sends password reset confirmation.
+   * @param {string} to 
+   * @param {string} name 
+   */
+  async sendResetSuccessEmail(to, name) {
+    const subject = "Password Successfully Reset - Sumiraj";
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+        <h2 style="color: #28a745; text-align: center;">Password Reset Confirmed</h2>
+        <p>Dear ${name},</p>
+        <p>Your password was successfully updated. If you did not perform this action, please secure your account immediately.</p>
+        <br/>
+        <p>Best Regards,</p>
+        <p><strong>Sumiraj Team</strong></p>
+      </div>
+    `;
+    return this.sendMail({ to, subject, html });
+  }
+
+  /**
+   * Sends an OTP email.
+   * @param {string} to 
+   * @param {string} name 
+   * @param {string} otp 
+   */
+  async sendOTPEmail(to, name, otp) {
+    const subject = "Your One-Time Password (OTP) - Sumiraj";
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+        <h2 style="color: #0056b3; text-align: center;">Your Security OTP</h2>
+        <p>Dear ${name},</p>
+        <p>Use the following One-Time Password (OTP) to complete your transaction or login process. This OTP is valid for 10 minutes.</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #0056b3; background-color: #f8f9fa; padding: 10px 20px; border: 1px dashed #0056b3; border-radius: 4px; display: inline-block;">${otp}</span>
+        </div>
+        <p>If you did not request this, please secure your account.</p>
+        <br/>
+        <p>Best Regards,</p>
+        <p><strong>Sumiraj Team</strong></p>
+      </div>
+    `;
+    return this.sendMail({ to, subject, html });
+  }
+
+  /**
+   * Sends an email notification when a new business enquiry is received.
+   * @param {Object} enquiry 
+   */
+  async sendEnquiryNotificationEmail(enquiry) {
+    const subject = `New Business Enquiry from ${enquiry.fullName || enquiry.company || enquiry.email}`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+        <h2 style="color: #0056b3; text-align: center;">New Business / Get a Quote Enquiry</h2>
+        <p>A new quote enquiry has been submitted on the Sumiraj website:</p>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Full Name:</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.fullName || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Company:</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.company || 'N/A'}</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Email:</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.email}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Mobile:</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.mobile}</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Source Location:</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.sourceLocation || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Destination Location:</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.destinationLocation || 'N/A'}</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Shipment Weight:</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.shipmentWeight || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Enquiry Type:</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.enquiryType || 'N/A'}</td>
+          </tr>
+          <tr style="background-color: #f8f9fa;">
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Message:</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.message || 'N/A'}</td>
+          </tr>
+        </table>
+        <br/>
+        <p>Best Regards,</p>
+        <p><strong>Sumiraj Portal</strong></p>
+      </div>
+    `;
+    const recipient = process.env.QUOTE_NOTIFICATION_EMAIL || fromAddress;
+    return this.sendMail({ to: recipient, subject, html });
+  }
+}
+
+module.exports = new MailService();

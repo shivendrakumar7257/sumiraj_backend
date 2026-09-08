@@ -1,0 +1,916 @@
+{
+  "info": {
+    "_postman_id": "bfd9c9a5-7b56-4277-bf41-754d24177c8e",
+    "name": "Sumiraj API",
+    "description": "Production-ready Postman Collection for Sumiraj backend APIs. Features auto token-saving scripts, sample request payloads, and paginated searches.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"System Administrator\",\n  \"email\": \"admin@sumiraj.com\",\n  \"password\": \"AdminSecurePassword@2026\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "signup"
+              ]
+            },
+            "description": "Registers the very first user as an administrator. After the first signup, all subsequent signup requests will be blocked and return HTTP 403."
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success && jsonData.data) {",
+                  "    pm.environment.set(\"accessToken\", jsonData.data.accessToken);",
+                  "    pm.environment.set(\"refreshToken\", jsonData.data.refreshToken);",
+                  "    console.log(\"Access Token and Refresh Token set successfully in Postman Environment!\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@sumiraj.com\",\n  \"password\": \"AdminSecurePassword@2026\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates the admin and returns access token + refresh token. The test script saves the tokens automatically to your environment variables."
+          },
+          "response": []
+        },
+        {
+          "name": "Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "profile"
+              ]
+            },
+            "description": "Fetches the current logged in admin user details. Requires Bearer access token."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success && jsonData.data) {",
+                  "    pm.environment.set(\"accessToken\", jsonData.data.accessToken);",
+                  "    pm.environment.set(\"refreshToken\", jsonData.data.refreshToken);",
+                  "    console.log(\"New Access and Refresh Tokens saved successfully!\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh-token"
+              ]
+            },
+            "description": "Generates a new Access and Refresh Token using the current Refresh Token. Both the cookie and request body inputs are supported."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Logs out the authenticated administrator and clears/revokes their refresh token from the database."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Blog",
+      "item": [
+        {
+          "name": "Create",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Expanding Warehousing and Supply Chain Operations in 2026\",\n  \"shortDescription\": \"An in-depth look at how smart logistics and AI-driven warehouse systems are transforming transport speed and order accuracy.\",\n  \"content\": \"Smart warehousing is changing the landscape of distribution. By employing automated guided vehicles (AGVs), real-time stock allocation algorithms, and internet-of-things (IoT) environmental sensors, logistics companies are cutting processing time in half while driving down fuel costs...\",\n  \"featuredImage\": \"https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d\",\n  \"metaTitle\": \"AI Warehousing & Smart Logistics Trends 2026\",\n  \"metaDescription\": \"Discover the impact of automation, AGVs, and IoT tracking on logistics and distribution speed in 2026.\",\n  \"isPublished\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/blog",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "blog"
+              ]
+            },
+            "description": "Creates a new blog post. The slug is automatically generated from the title and verified for uniqueness. Requires Admin authorization."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/blog?search=Warehousing&isPublished=true&sortBy=createdAt&sortOrder=desc&page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "blog"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "Warehousing",
+                  "description": "Full-text search query across title, short description, and content"
+                },
+                {
+                  "key": "isPublished",
+                  "value": "true",
+                  "description": "Filter by published status (true/false)"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt",
+                  "description": "Field to sort by"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc",
+                  "description": "Sort order: asc or desc"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number for pagination"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of items per page"
+                }
+              ]
+            },
+            "description": "Retrieves all blogs with paginated query controls, text search, sorting, and isPublished filtering. This endpoint is public."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/blog/expanding-warehousing-and-supply-chain-operations-in-2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "blog",
+                "expanding-warehousing-and-supply-chain-operations-in-2026"
+              ]
+            },
+            "description": "Retrieves a single blog post using its unique lowercase URL slug. This endpoint is public."
+          },
+          "response": []
+        },
+        {
+          "name": "Update",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Warehousing and Supply Chain Operations in 2026\",\n  \"shortDescription\": \"An updated article on smart logistics and automated warehouse systems.\",\n  \"isPublished\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/blog/{{blogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "blog",
+                "{{blogId}}"
+              ]
+            },
+            "description": "Updates an existing blog post details. Regenerates the URL slug if the title changes. Requires Admin authorization."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/blog/{{blogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "blog",
+                "{{blogId}}"
+              ]
+            },
+            "description": "Deletes a blog post by its Object ID. Requires Admin authorization."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Career",
+      "item": [
+        {
+          "name": "Create",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobTitle\": \"Lead Logistics Coordinator\",\n  \"department\": \"Supply Chain Operations\",\n  \"location\": \"Chicago, IL (Hybrid)\",\n  \"employmentType\": \"Full-time\",\n  \"experience\": \"4-6 Years\",\n  \"salary\": \"$75,000 - $85,000 / Year\",\n  \"description\": \"We are seeking an experienced Logistics Coordinator to lead route planning, driver communications, and dispatch coordination for domestic freight operations.\",\n  \"responsibilities\": [\n    \"Coordinate daily transport dispatches and optimize regional routing paths.\",\n    \"Monitor vendor carrier SLA performance metrics.\",\n    \"Address transit exceptions and resolve delivery delays in real time.\"\n  ],\n  \"requirements\": [\n    \"Bachelor's degree in Supply Chain Management or equivalent.\",\n    \"Strong familiarity with route planning systems (TMS) and fleet GPS setups.\",\n    \"Excellent communication skills and conflict resolution capabilities.\"\n  ],\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/career",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "career"
+              ]
+            },
+            "description": "Posts a new career job vacancy. Enforces validation arrays for requirements and responsibilities. Requires Admin authorization."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/career?search=Logistics&department=Supply Chain Operations&location=Chicago&employmentType=Full-time&isActive=true&sortBy=createdAt&sortOrder=desc&page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "career"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "Logistics",
+                  "description": "Full-text search query across job title, department, and description"
+                },
+                {
+                  "key": "department",
+                  "value": "Supply Chain Operations",
+                  "description": "Filter by department name (case-insensitive partial match)"
+                },
+                {
+                  "key": "location",
+                  "value": "Chicago",
+                  "description": "Filter by location name (case-insensitive partial match)"
+                },
+                {
+                  "key": "employmentType",
+                  "value": "Full-time",
+                  "description": "Filter by employment type: Full-time, Part-time, Contract, Internship"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "description": "Filter by job status (true/false)"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt",
+                  "description": "Field to sort by"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc",
+                  "description": "Sort order: asc or desc"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number for pagination"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of items per page"
+                }
+              ]
+            },
+            "description": "Retrieves all job listings with support for paginated query variables, filters, sorting, and full-text search. This endpoint is public."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/career/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "career",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Retrieves a single job posting details by its unique Object ID. This endpoint is public."
+          },
+          "response": []
+        },
+        {
+          "name": "Update",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobTitle\": \"Senior Lead Logistics Coordinator\",\n  \"salary\": \"$85,000 - $95,000 / Year\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/career/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "career",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Updates an existing job posting details. Requires Admin authorization."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/career/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "career",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Deletes a job posting by its Object ID. Requires Admin authorization."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Enquiry",
+      "item": [
+        {
+          "name": "Submit Business Enquiry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"John Doe\",\n  \"company\": \"Acme Express Ltd\",\n  \"email\": \"johndoe@example.com\",\n  \"mobile\": \"+1-555-0199\",\n  \"sourceLocation\": \"Chicago, IL\",\n  \"destinationLocation\": \"Dallas, TX\",\n  \"shipmentWeight\": \"2,500 kg\",\n  \"enquiryType\": \"Freight Transport\",\n  \"message\": \"Looking for a rate quote for weekly full-truckload shipments starting next month.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/enquiry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "enquiry"
+              ]
+            },
+            "description": "Submits a business / quote enquiry. Requires only email and mobile; all other fields are optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Enquiries",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/enquiry?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "enquiry"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Retrieves all business enquiries with pagination, search, and sorting. Admin authorization required."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single Enquiry",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/enquiry/{{enquiryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "enquiry",
+                "{{enquiryId}}"
+              ]
+            },
+            "description": "Retrieves a single enquiry by Object ID. Admin authorization required."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Enquiry",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/enquiry/{{enquiryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "enquiry",
+                "{{enquiryId}}"
+              ]
+            },
+            "description": "Deletes an enquiry by Object ID. Admin authorization required."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Job Applications",
+      "item": [
+        {
+          "name": "Submit Job Application (Drive Link)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"jobTitle\": \"Lead Logistics Coordinator\",\n  \"branch\": \"Chicago, IL\",\n  \"fullName\": \"Jane Smith\",\n  \"email\": \"janesmith@example.com\",\n  \"phone\": \"+1-555-0188\",\n  \"driveLink\": \"https://drive.google.com/file/d/sample-resume-link/view\",\n  \"coverLetter\": \"I am excited to apply for the Lead Logistics Coordinator position with over 5 years of supply chain experience.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/job-applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "job-applications"
+              ]
+            },
+            "description": "Submits a job application using a Google Drive resume link. Required: fullName, email, phone, jobId, jobTitle, plus either resume file OR driveLink."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Job Applications",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/job-applications?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "job-applications"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "New",
+                  "disabled": true
+                },
+                {
+                  "key": "jobId",
+                  "value": "{{jobId}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Retrieves all job applications with pagination, search, status filter, and jobId filter. Admin authorization required."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single Job Application",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/job-applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "job-applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": "Retrieves a single job application by Object ID. Admin authorization required."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Application Status",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Reviewed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/job-applications/{{applicationId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "job-applications",
+                "{{applicationId}}",
+                "status"
+              ]
+            },
+            "description": "Updates status of a job application (New, Reviewed, Shortlisted, Rejected). Admin authorization required."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Job Application",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/job-applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "job-applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": "Deletes a job application by Object ID. Admin authorization required."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "blogId",
+      "value": "insert_blog_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "insert_job_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "enquiryId",
+      "value": "insert_enquiry_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "applicationId",
+      "value": "insert_application_object_id_here",
+      "type": "string"
+    }
+  ]
+}
