@@ -14,6 +14,8 @@ const blogRouter = require("./routes/blog.routes");
 const enquiryRouter = require("./routes/enquiry.routes");
 const portfolioRouter = require("./routes/portfolio.routes");
 const uploadRouter = require("./routes/upload.routes");
+const dashboardRouter = require("./routes/dashboard.routes");
+const adminRouter = require("./routes/admin.routes");
 
 const connectDB = require("./config/database");
 
@@ -159,6 +161,8 @@ app.use("/api/blog", blogRouter);
 app.use("/api/enquiry", enquiryRouter);
 app.use("/api/portfolio", portfolioRouter);
 app.use("/api/upload", uploadRouter);
+app.use("/api/admin", adminRouter);
+app.use("/api/dashboard", dashboardRouter);
 
 // Undefined API routes handler
 app.all("*", (req, res, next) => {

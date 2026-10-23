@@ -20,6 +20,7 @@ Sumiraj-backend/
 │   ├── controllers/        # Express Route handlers
 │   │   ├── auth.controller.js
 │   │   ├── blog.controller.js
+│   │   ├── dashboard.controller.js
 │   │   ├── enquiry.controller.js
 │   │   └── portfolio.controller.js
 │   ├── middlewares/        # Express request hooks
@@ -29,18 +30,21 @@ Sumiraj-backend/
 │   │   ├── multer.middleware.js    # File storage configuration
 │   │   └── validate.middleware.js  # Intercepts express-validator results
 │   ├── models/             # Mongoose schemas
+│   │   ├── Analytics.js
 │   │   ├── Blog.js
 │   │   ├── Enquiry.js
 │   │   ├── Portfolio.js
 │   │   └── User.js
 │   ├── repositories/       # Mongoose CRUD abstraction
 │   │   ├── blog.repository.js
+│   │   ├── dashboard.repository.js
 │   │   ├── enquiry.repository.js
 │   │   ├── portfolio.repository.js
 │   │   └── user.repository.js
 │   ├── services/           # Core business logic layer
 │   │   ├── auth.service.js
 │   │   ├── blog.service.js
+│   │   ├── dashboard.service.js
 │   │   ├── enquiry.service.js
 │   │   ├── portfolio.service.js
 │   │   └── mail.service.js         # Mail transporter templates & sender
@@ -56,6 +60,8 @@ Sumiraj-backend/
 │   ├── routes/             # API Router definitions
 │   │   ├── auth.routes.js
 │   │   ├── blog.routes.js
+│   │   ├── admin.routes.js
+│   │   ├── dashboard.routes.js
 │   │   ├── enquiry.routes.js
 │   │   └── portfolio.routes.js
 │   ├── app.js              # Express app bootstrap & middleware mounting
@@ -177,6 +183,17 @@ Define the configuration variables inside `.env`:
 *   `POST /` - Creates a new portfolio item (Slug auto-generated from title). Protected (Admin only).
 *   `PUT /:id` - Updates a portfolio item. Protected (Admin only).
 *   `DELETE /:id` - Deletes a portfolio item. Protected (Admin only).
+
+#### 5. Admin Dashboard Module (`/api/admin/dashboard` & `/api/dashboard`)
+*   `GET /api/admin/dashboard` (or `GET /api/dashboard`) - Retrieves comprehensive metrics for the admin dashboard:
+    *   **Total Website Visitors** (`totalWebsiteVisitors` / `totalWebsiteVisitor`)
+    *   **New Enquiries** (`newEnquiries` / `newEnquires`)
+    *   **Quote Requests** (`quoteRequests` / `quoteRequest`)
+    *   **Top Performing Page** (`topPerformingPage` / `topPerformingPages`)
+    *   **Recent Leads** (`recentLeads` - latest enquiries with contact & shipping details)
+    *   **WhatsApp Clicks** (`whatsappClicks` / `whatsappClick`)
+    *   Supports optional filtering query parameters: `?timeRange=today|yesterday|week|month|year|all` or `?startDate=...&endDate=...`. Protected (Admin only).
+*   `POST /api/dashboard/track` - Public client tracking endpoint to record page views, visitors, and WhatsApp button clicks (`{ "type": "page_view" | "visitor" | "whatsapp_click", "page": "/services" }`). Public.
 
 ---
 

@@ -884,6 +884,77 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Admin Dashboard",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/dashboard?timeRange=all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "dashboard"
+              ],
+              "query": [
+                {
+                  "key": "timeRange",
+                  "value": "all",
+                  "description": "Optional filter: today, yesterday, week, month, year, all"
+                }
+              ]
+            },
+            "description": "Retrieves administrative dashboard metrics: total website visitors, new enquires, quote requests, top performing page, recent leads, and whatsapp clicks. Requires Admin bearer token."
+          },
+          "response": []
+        },
+        {
+          "name": "Track Website Event (Public)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"page_view\",\n  \"page\": \"/services/road-freight\",\n  \"visitorId\": \"vis_12345\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/track",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "track"
+              ]
+            },
+            "description": "Public endpoint used by the website client to track page views, unique visitor sessions, and WhatsApp button clicks (type: 'page_view' | 'visitor' | 'whatsapp_click')."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
