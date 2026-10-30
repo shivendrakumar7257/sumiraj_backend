@@ -51,6 +51,10 @@ router.post(
   enquiryController.create
 );
 
+// Diagnostic route: Test email connection (Public / Debugging)
+router.get("/test-email", enquiryController.testEmail);
+router.post("/test-email", enquiryController.testEmail);
+
 // Admin Protected Routes: Retrieve and manage enquiries
 router.get("/", authMiddleware, adminMiddleware, enquiryController.getAll);
 router.get("/:id", authMiddleware, adminMiddleware, enquiryController.getById);

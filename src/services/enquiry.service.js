@@ -12,10 +12,22 @@ class EnquiryService {
   async createEnquiry(enquiryData) {
     const enquiry = await enquiryRepository.create(enquiryData);
 
-    // Send email notification asynchronously
-    mailService.sendEnquiryNotificationEmail(enquiry);
+    // CRITICAL: Await on Vercel Serverless so execution doesn't terminate before email sends!
+    try {
+      await mailService.sendEnquiryNotificationEmail(enquiry);
+    } catch (err) {
+      console.error("Enquiry notification email failed:", err.message);
+    }
 
     return enquiry;
+  }
+
+  /**
+   * Sends a test email to verify production SMTP connection.
+   * @param {string} [targetEmail]
+   */
+  async sendTestEmail(targetEmail) {
+    return mailService.sendTestEmail(targetEmail);
   }
 
   /**

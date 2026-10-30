@@ -1,4 +1,4 @@
-const { transporter, fromName, fromAddress } = require("../config/mail");
+const { getTransporter } = require("../config/mail");
 const path = require("path");
 const fs = require("fs");
 
@@ -39,6 +39,24 @@ class MailService {
    * @returns {Promise<Object|null>} Info object on success, null on failure
    */
   async sendMail({ to, subject, html, attachments = [] }) {
+    const fromName = process.env.MAIL_FROM_NAME || "Sumiraj";
+    const fromAddress =
+      process.env.MAIL_FROM_ADDRESS ||
+      process.env.SMTP_USER ||
+      "info@sumiraj.com";
+
+    if (!to) {
+      console.error("sendMail error: No recipient specified ('to' is empty)!");
+      return null;
+    }
+
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.error(
+        "sendMail error: Missing SMTP credentials in environment variables (SMTP_HOST, SMTP_USER, SMTP_PASS)!"
+      );
+      return null;
+    }
+
     const mailOptions = {
       from: `"${fromName}" <${fromAddress}>`,
       to,
@@ -48,14 +66,86 @@ class MailService {
     };
 
     try {
+      const transporter = getTransporter();
+      console.log(`Sending email to ${to} via SMTP host ${process.env.SMTP_HOST}...`);
       const info = await transporter.sendMail(mailOptions);
-      console.log(`Email sent successfully: ${info.messageId}`);
+      console.log(`Email sent successfully to ${to}: ${info.messageId}`);
       return info;
     } catch (error) {
-      console.error(`Failed to send email to ${to}:`, error.message);
-      // Do not throw the error to prevent blocking execution workflows
+      console.error(`Failed to send email to ${to}:`, {
+        message: error.message,
+        code: error.code,
+        response: error.response
+      });
+      // Do not throw to avoid crashing parent callers, return null
       return null;
     }
+  }
+
+  /**
+   * Sends a test email to verify SMTP credentials on production.
+   * @param {string} [targetEmail]
+   */
+  async sendTestEmail(targetEmail) {
+    const recipient =
+      targetEmail ||
+      process.env.INQUIRY_NOTIFICATION_EMAIL ||
+      process.env.QUOTE_NOTIFICATION_EMAIL ||
+      process.env.MAIL_FROM_ADDRESS ||
+      "info@sumiraj.com";
+
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error(
+        "Missing SMTP credentials in environment variables! Check SMTP_HOST, SMTP_USER, and SMTP_PASS in Vercel settings."
+      );
+    }
+
+    const subject = "Sumiraj SMTP Connection Test - Verification Successful";
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <div style="text-align: center; border-bottom: 2px solid #ff5722; padding-bottom: 12px; margin-bottom: 16px;">
+          <h2 style="color: #ff5722; margin: 0;">SMTP Test Successful</h2>
+          <p style="color: #718096; margin: 4px 0 0; font-size: 13px;">Sumiraj Backend Mail System</p>
+        </div>
+        <p>If you received this message, your production SMTP mail delivery to <strong>${recipient}</strong> is working perfectly!</p>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+          <tr style="background-color: #f7fafc;">
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0; font-weight: bold; width: 35%;">SMTP Host:</td>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${process.env.SMTP_HOST}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0; font-weight: bold;">SMTP User:</td>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${process.env.SMTP_USER}</td>
+          </tr>
+          <tr style="background-color: #f7fafc;">
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0; font-weight: bold;">Recipient Inbox:</td>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0; font-weight: bold; color: #ff5722;">${recipient}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0; font-weight: bold;">Timestamp:</td>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${new Date().toISOString()}</td>
+          </tr>
+        </table>
+        <br/>
+        <p style="color: #38a169; font-weight: bold; text-align: center;">All new inquiries submitted on the website will be delivered to this email.</p>
+      </div>
+    `;
+
+    const transporter = getTransporter();
+    // Test the SMTP handshake first
+    await transporter.verify();
+
+    const info = await this.sendMail({ to: recipient, subject, html });
+    if (!info) {
+      throw new Error("Transporter verified, but sending test email failed. Check server logs for details.");
+    }
+
+    return {
+      success: true,
+      recipient,
+      messageId: info.messageId,
+      smtpHost: process.env.SMTP_HOST
+    };
   }
 
   /**
@@ -283,7 +373,8 @@ class MailService {
     const recipient =
       process.env.INQUIRY_NOTIFICATION_EMAIL ||
       process.env.QUOTE_NOTIFICATION_EMAIL ||
-      fromAddress;
+      process.env.MAIL_FROM_ADDRESS ||
+      "info@sumiraj.com";
 
     // Send email with file attachments, fallback to body links if attachment size exceeds limits
     let info = await this.sendMail({

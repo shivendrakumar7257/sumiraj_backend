@@ -143,6 +143,38 @@ class EnquiryController {
       next(error);
     }
   };
+
+  /**
+   * Diagnostic endpoint to test SMTP email delivery directly.
+   * Useful to verify credentials on production (e.g. Vercel).
+   */
+  testEmail = async (req, res, next) => {
+    try {
+      const target = req.query.to || req.body?.to;
+      const result = await enquiryService.sendTestEmail(target);
+      return res
+        .status(200)
+        .json(new ApiResponse(200, result, "Test email sent successfully!"));
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send test email",
+        error: error.message,
+        smtpConfigStatus: {
+          SMTP_HOST: process.env.SMTP_HOST || "MISSING",
+          SMTP_PORT: process.env.SMTP_PORT || "465",
+          SMTP_SECURE: process.env.SMTP_SECURE || "true",
+          SMTP_USER: process.env.SMTP_USER || "MISSING",
+          SMTP_PASS: process.env.SMTP_PASS ? "CONFIGURED (hidden)" : "MISSING",
+          RECIPIENT:
+            process.env.INQUIRY_NOTIFICATION_EMAIL ||
+            process.env.QUOTE_NOTIFICATION_EMAIL ||
+            process.env.MAIL_FROM_ADDRESS ||
+            "info@sumiraj.com"
+        }
+      });
+    }
+  };
 }
 
 module.exports = new EnquiryController();
