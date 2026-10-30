@@ -1,5 +1,6 @@
 const enquiryRepository = require("../repositories/enquiry.repository");
 const mailService = require("./mail.service");
+const storageService = require("./storage.service");
 const ApiError = require("../utils/ApiError");
 
 class EnquiryService {
@@ -54,7 +55,7 @@ class EnquiryService {
   }
 
   /**
-   * Deletes an enquiry by ID.
+   * Deletes an enquiry by ID and cleans up any attached files from storage.
    * @param {string} id 
    * @returns {Promise<Object>}
    */
@@ -63,6 +64,17 @@ class EnquiryService {
     if (!enquiry) {
       throw new ApiError(404, "Enquiry not found");
     }
+
+    // Delete attached files from storage if present
+    if (enquiry.attachments && Array.isArray(enquiry.attachments)) {
+      for (const att of enquiry.attachments) {
+        const fileUrl = typeof att === "string" ? att : att?.url;
+        if (fileUrl) {
+          await storageService.deleteFile(fileUrl);
+        }
+      }
+    }
+
     return enquiryRepository.delete(id);
   }
 }

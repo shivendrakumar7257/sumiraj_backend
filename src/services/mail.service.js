@@ -1,4 +1,32 @@
 const { transporter, fromName, fromAddress } = require("../config/mail");
+const path = require("path");
+const fs = require("fs");
+
+const formatFileSize = (bytes) => {
+  if (!bytes || bytes === 0) return "";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+};
+
+const resolveFileUrl = (url) => {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  const baseUrl = (
+    process.env.BACKEND_URL ||
+    process.env.BASE_URL ||
+    process.env.FRONTEND_URL?.split(",")[0] ||
+    "https://sumiraj.com"
+  ).replace(/\/+$/, "");
+  return `${baseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
+};
+
+const isImageFile = (mimetype, url) => {
+  if (mimetype && mimetype.startsWith("image/")) return true;
+  if (url && /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(url)) return true;
+  return false;
+};
 
 class MailService {
   /**
@@ -123,59 +151,159 @@ class MailService {
 
   /**
    * Sends an email notification when a new business enquiry is received.
+   * Displays all inquiry form details, client specifications, and attachment previews/links.
    * @param {Object} enquiry 
    */
   async sendEnquiryNotificationEmail(enquiry) {
-    const subject = `New Business Enquiry from ${enquiry.fullName || enquiry.company || enquiry.email}`;
+    const clientIdentifier = enquiry.fullName || enquiry.company || enquiry.email;
+    const projectTypeDisplay = enquiry.projectType || enquiry.enquiryType || "General Enquiry";
+    const subject = `New Inquiry: ${projectTypeDisplay} - from ${clientIdentifier}`;
+
+    // Format attachments and physical mail attachments
+    let attachmentsHtml = "";
+    const mailAttachments = [];
+
+    if (enquiry.attachments && enquiry.attachments.length > 0) {
+      attachmentsHtml = `
+        <div style="margin-top: 25px; padding-top: 20px; border-top: 2px solid #e2e8f0;">
+          <h3 style="color: #1a202c; margin-bottom: 14px; font-size: 16px;">
+            📎 Attachments & Uploaded Documents (${enquiry.attachments.length}):
+          </h3>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+      `;
+
+      for (const att of enquiry.attachments) {
+        const fullUrl = resolveFileUrl(att.url);
+        const fileName = att.originalname || "attachment";
+        const sizeStr = formatFileSize(att.size);
+        const imgCheck = isImageFile(att.mimetype, att.url);
+
+        if (imgCheck) {
+          attachmentsHtml += `
+            <div style="padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f7fafc; margin-bottom: 12px;">
+              <div style="margin-bottom: 8px;">
+                <a href="${fullUrl}" target="_blank">
+                  <img src="${fullUrl}" alt="${fileName}" style="max-width: 220px; max-height: 160px; border-radius: 6px; border: 1px solid #cbd5e0; object-fit: cover; display: block;" />
+                </a>
+              </div>
+              <div style="font-weight: 600; color: #2d3748; font-size: 13px;">🖼️ ${fileName} ${sizeStr ? `<span style="color: #718096; font-weight: normal;">(${sizeStr})</span>` : ""}</div>
+              <div style="margin-top: 6px;">
+                <a href="${fullUrl}" target="_blank" style="display: inline-block; background-color: #ff5722; color: #ffffff; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold;">View / Download Image</a>
+              </div>
+            </div>
+          `;
+        } else {
+          attachmentsHtml += `
+            <div style="padding: 12px; border: 1px solid #fed7d7; border-radius: 8px; background-color: #fffaf0; border-left: 4px solid #e53e3e; margin-bottom: 12px;">
+              <div style="font-weight: 600; color: #2d3748; font-size: 13px;">📄 ${fileName} ${sizeStr ? `<span style="color: #718096; font-weight: normal;">(${sizeStr})</span>` : ""}</div>
+              <div style="margin-top: 6px;">
+                <a href="${fullUrl}" target="_blank" style="display: inline-block; background-color: #e53e3e; color: #ffffff; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold;">Open / Download PDF Document</a>
+              </div>
+            </div>
+          `;
+        }
+
+        // Add to physical attachments if remote URL or local file exists
+        if (att.url && (att.url.startsWith("http://") || att.url.startsWith("https://"))) {
+          mailAttachments.push({
+            filename: fileName,
+            path: att.url
+          });
+        } else if (att.url && att.url.startsWith("/public/uploads/")) {
+          const localPath = path.join(process.cwd(), att.url);
+          if (fs.existsSync(localPath)) {
+            mailAttachments.push({
+              filename: fileName,
+              path: localPath
+            });
+          }
+        }
+      }
+
+      attachmentsHtml += `
+          </div>
+        </div>
+      `;
+    }
+
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-        <h2 style="color: #0056b3; text-align: center;">New Business / Get a Quote Enquiry</h2>
-        <p>A new quote enquiry has been submitted on the Sumiraj website:</p>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-          <tr style="background-color: #f8f9fa;">
-            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Full Name:</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.fullName || 'N/A'}</td>
+      <div style="font-family: Arial, sans-serif; max-width: 650px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff;">
+        <div style="text-align: center; border-bottom: 2px solid #ff5722; padding-bottom: 16px; margin-bottom: 20px;">
+          <h2 style="color: #ff5722; margin: 0; font-size: 22px;">New Project Inquiry Received</h2>
+          <p style="color: #718096; margin: 6px 0 0; font-size: 14px;">Sumiraj Official Website Contact Form</p>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+          <tr style="background-color: #f8fafc;">
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; width: 35%; color: #4a5568;">Full Name:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c; font-weight: 600;">${enquiry.fullName || 'N/A'}</td>
           </tr>
           <tr>
-            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Company:</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.company || 'N/A'}</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Company:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">${enquiry.company || 'N/A'}</td>
           </tr>
-          <tr style="background-color: #f8f9fa;">
-            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Email:</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.email}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Mobile:</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.mobile}</td>
-          </tr>
-          <tr style="background-color: #f8f9fa;">
-            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Source Location:</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.sourceLocation || 'N/A'}</td>
+          <tr style="background-color: #f8fafc;">
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Email:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">
+              <a href="mailto:${enquiry.email}" style="color: #0056b3; text-decoration: none; font-weight: 600;">${enquiry.email}</a>
+            </td>
           </tr>
           <tr>
-            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Destination Location:</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.destinationLocation || 'N/A'}</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Mobile Number:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">
+              <a href="tel:${enquiry.mobile}" style="color: #0056b3; text-decoration: none; font-weight: 600;">${enquiry.mobile}</a>
+            </td>
           </tr>
-          <tr style="background-color: #f8f9fa;">
-            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Shipment Weight:</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.shipmentWeight || 'N/A'}</td>
+          <tr style="background-color: #f8fafc;">
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Project Location:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">${enquiry.projectLocation || enquiry.destinationLocation || enquiry.sourceLocation || 'N/A'}</td>
           </tr>
           <tr>
-            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Enquiry Type:</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.enquiryType || 'N/A'}</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Approximate Area:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">${enquiry.approximateArea || enquiry.shipmentWeight || 'N/A'}</td>
           </tr>
-          <tr style="background-color: #f8f9fa;">
-            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Message:</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${enquiry.message || 'N/A'}</td>
+          <tr style="background-color: #f8fafc;">
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Project Type:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #ff5722; font-weight: 600;">${enquiry.projectType || enquiry.enquiryType || 'Pre-Engineered Buildings (PEB)'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568; vertical-align: top;">Specification / Message:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #2d3748; line-height: 1.5; white-space: pre-wrap;">${enquiry.specification || enquiry.message || 'N/A'}</td>
           </tr>
         </table>
-        <br/>
-        <p>Best Regards,</p>
-        <p><strong>Sumiraj Portal</strong></p>
+
+        ${attachmentsHtml}
+
+        <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #e2e8f0; text-align: center; color: #a0aec0; font-size: 12px;">
+          <p style="margin: 0;">This email was automatically generated by Sumiraj System.</p>
+        </div>
       </div>
     `;
-    const recipient = process.env.QUOTE_NOTIFICATION_EMAIL || fromAddress;
-    return this.sendMail({ to: recipient, subject, html });
+
+    const recipient =
+      process.env.INQUIRY_NOTIFICATION_EMAIL ||
+      process.env.QUOTE_NOTIFICATION_EMAIL ||
+      fromAddress;
+
+    // Send email with file attachments, fallback to body links if attachment size exceeds limits
+    let info = await this.sendMail({
+      to: recipient,
+      subject,
+      html,
+      attachments: mailAttachments
+    });
+
+    if (!info && mailAttachments.length > 0) {
+      console.log("Retrying enquiry notification email without physical attachments...");
+      info = await this.sendMail({
+        to: recipient,
+        subject,
+        html,
+        attachments: []
+      });
+    }
+
+    return info;
   }
 }
 

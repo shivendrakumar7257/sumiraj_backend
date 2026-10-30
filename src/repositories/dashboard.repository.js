@@ -71,6 +71,9 @@ class DashboardRepository {
     const quoteRequestsFilter = {
       $or: [
         { enquiryType: { $regex: /quote/i } },
+        { projectType: { $exists: true, $ne: "" } },
+        { approximateArea: { $exists: true, $ne: "" } },
+        { projectLocation: { $exists: true, $ne: "" } },
         { sourceLocation: { $exists: true, $ne: "" } },
         { destinationLocation: { $exists: true, $ne: "" } },
         { shipmentWeight: { $exists: true, $ne: "" } }
@@ -83,7 +86,7 @@ class DashboardRepository {
     const recentLeads = await Enquiry.find()
       .sort({ createdAt: -1 })
       .limit(recentLeadsLimit)
-      .select("fullName company email mobile sourceLocation destinationLocation shipmentWeight enquiryType message status createdAt")
+      .select("fullName company email mobile projectLocation approximateArea projectType specification message attachments sourceLocation destinationLocation shipmentWeight enquiryType status createdAt")
       .lean();
 
     // 7. General System Overview Summary
