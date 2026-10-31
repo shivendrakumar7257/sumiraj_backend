@@ -1,22 +1,53 @@
 const nodemailer = require("nodemailer");
 
 /**
+ * Strips accidental wrapping quotes and leading/trailing whitespace
+ * from environment variable strings (common when copy-pasting into Vercel).
+ */
+const cleanEnv = (val) => {
+  if (!val) return "";
+  let s = String(val).trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+};
+
+/**
  * Creates and returns a configured Nodemailer transporter.
  * Dynamically resolves environment variables so it works properly in serverless environments.
  */
-const getTransporter = () => {
-  const host = process.env.SMTP_HOST || "";
-  const port = parseInt(process.env.SMTP_PORT || "465", 10);
-  const isSecureEnv = process.env.SMTP_SECURE === "true" || process.env.SMTP_SECURE === "1";
+const getTransporter = (overrides = {}) => {
+  const host = cleanEnv(overrides.host || process.env.SMTP_HOST || "");
+  const port = parseInt(overrides.port || process.env.SMTP_PORT || "465", 10);
+  const user = cleanEnv(overrides.user || process.env.SMTP_USER || "");
+  const pass = cleanEnv(overrides.pass || process.env.SMTP_PASS || "");
 
-  // Port 465 uses SSL/TLS direct; Port 587 uses STARTTLS
-  const isSecure = port === 465 ? true : isSecureEnv;
-  const requireTLS = port === 587 || (!isSecure && process.env.SMTP_REQUIRE_TLS !== "false");
+  const isSecureEnv =
+    process.env.SMTP_SECURE === "true" || process.env.SMTP_SECURE === "1";
 
-  const fromAddress =
-    process.env.MAIL_FROM_ADDRESS ||
-    process.env.SMTP_USER ||
-    "info@sumiraj.com";
+  // Port 465 uses direct SSL/TLS; Port 587 uses STARTTLS
+  const isSecure =
+    overrides.secure !== undefined
+      ? Boolean(overrides.secure)
+      : port === 465
+      ? true
+      : isSecureEnv;
+
+  const requireTLS =
+    overrides.requireTLS !== undefined
+      ? Boolean(overrides.requireTLS)
+      : port === 587 || (!isSecure && process.env.SMTP_REQUIRE_TLS !== "false");
+
+  const fromAddress = cleanEnv(
+    overrides.fromAddress ||
+      process.env.MAIL_FROM_ADDRESS ||
+      process.env.SMTP_USER ||
+      "info@sumiraj.com"
+  );
 
   const fromDomain = fromAddress.includes("@")
     ? fromAddress.split("@")[1]
@@ -29,8 +60,8 @@ const getTransporter = () => {
     requireTLS: requireTLS,
     name: process.env.SMTP_HELO_HOST || fromDomain,
     auth: {
-      user: process.env.SMTP_USER || "",
-      pass: process.env.SMTP_PASS || ""
+      user: user,
+      pass: pass
     },
     tls: {
       // Allow self-signed or shared hosting domain certificates on custom cPanel / webmail servers
@@ -48,15 +79,15 @@ const transporter = getTransporter();
 /**
  * Verifies connection to the SMTP server.
  */
-const verifyTransporter = async () => {
+const verifyTransporter = async (overrides = {}) => {
   try {
-    const transport = getTransporter();
+    const transport = getTransporter(overrides);
     await transport.verify();
     console.log("Mail SMTP connection established successfully.");
     return { success: true };
   } catch (error) {
     console.warn(
-      "Mail SMTP connection warning: Check SMTP credentials in the .env file. Error:",
+      "Mail SMTP connection warning: Check SMTP credentials in environment variables. Error:",
       error.message
     );
     return { success: false, error: error.message };
@@ -64,9 +95,13 @@ const verifyTransporter = async () => {
 };
 
 module.exports = {
+  cleanEnv,
   getTransporter,
   transporter,
   verifyTransporter,
   fromName: process.env.MAIL_FROM_NAME || "Sumiraj",
-  fromAddress: process.env.MAIL_FROM_ADDRESS || process.env.SMTP_USER || "info@sumiraj.com"
+  fromAddress:
+    process.env.MAIL_FROM_ADDRESS ||
+    process.env.SMTP_USER ||
+    "info@sumiraj.com"
 };

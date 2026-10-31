@@ -1,4 +1,4 @@
-const { getTransporter } = require("../config/mail");
+const { getTransporter, cleanEnv } = require("../config/mail");
 const path = require("path");
 const fs = require("fs");
 
@@ -30,27 +30,34 @@ const isImageFile = (mimetype, url) => {
 
 class MailService {
   /**
-   * Sends a general email.
+   * Sends a general email with automatic port fallback (465 <-> 587).
    * @param {Object} options - Email options
    * @param {string} options.to - Recipient email
    * @param {string} options.subject - Subject line
    * @param {string} options.html - HTML body
    * @param {Array} options.attachments - File attachments array
+   * @param {Object} [overrides] - Custom SMTP credentials for testing
    * @returns {Promise<Object|null>} Info object on success, null on failure
    */
-  async sendMail({ to, subject, html, attachments = [] }) {
-    const fromName = process.env.MAIL_FROM_NAME || "Sumiraj";
-    const fromAddress =
+  async sendMail({ to, subject, html, attachments = [] }, overrides = {}) {
+    const fromName = overrides.fromName || process.env.MAIL_FROM_NAME || "Sumiraj";
+    const fromAddress = cleanEnv(
+      overrides.fromAddress ||
       process.env.MAIL_FROM_ADDRESS ||
       process.env.SMTP_USER ||
-      "info@sumiraj.com";
+      "info@sumiraj.com"
+    );
 
     if (!to) {
       console.error("sendMail error: No recipient specified ('to' is empty)!");
       return null;
     }
 
-    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    const host = cleanEnv(overrides.host || process.env.SMTP_HOST || "");
+    const user = cleanEnv(overrides.user || process.env.SMTP_USER || "");
+    const pass = cleanEnv(overrides.pass || process.env.SMTP_PASS || "");
+
+    if (!host || !user || !pass) {
       console.error(
         "sendMail error: Missing SMTP credentials in environment variables (SMTP_HOST, SMTP_USER, SMTP_PASS)!"
       );
@@ -66,35 +73,61 @@ class MailService {
     };
 
     try {
-      const transporter = getTransporter();
-      console.log(`Sending email to ${to} via SMTP host ${process.env.SMTP_HOST}...`);
+      const transporter = getTransporter(overrides);
+      const port = overrides.port || process.env.SMTP_PORT || "465";
+      console.log(`Sending email to ${to} via SMTP host ${host}:${port}...`);
       const info = await transporter.sendMail(mailOptions);
       console.log(`Email sent successfully to ${to}: ${info.messageId}`);
       return info;
     } catch (error) {
+      console.warn(`Primary SMTP attempt on port ${overrides.port || process.env.SMTP_PORT || 465} failed: ${error.message}. Testing alternate port...`);
+
+      // Fallback: If 465 failed, try 587; if 587 failed, try 465
+      const primaryPort = parseInt(overrides.port || process.env.SMTP_PORT || "465", 10);
+      const fallbackPort = primaryPort === 465 ? 587 : 465;
+
+      try {
+        const altTransporter = getTransporter({
+          ...overrides,
+          port: fallbackPort,
+          secure: fallbackPort === 465
+        });
+        const altInfo = await altTransporter.sendMail(mailOptions);
+        console.log(`Email sent successfully on fallback port ${fallbackPort} to ${to}: ${altInfo.messageId}`);
+        return altInfo;
+      } catch (fallbackError) {
+        console.error(`Fallback SMTP attempt on port ${fallbackPort} also failed:`, fallbackError.message);
+      }
+
       console.error(`Failed to send email to ${to}:`, {
         message: error.message,
         code: error.code,
         response: error.response
       });
-      // Do not throw to avoid crashing parent callers, return null
       return null;
     }
   }
 
   /**
    * Sends a test email to verify SMTP credentials on production.
-   * @param {string} [targetEmail]
+   * @param {Object|string} [targetOrOpts]
    */
-  async sendTestEmail(targetEmail) {
-    const recipient =
-      targetEmail ||
+  async sendTestEmail(targetOrOpts = {}) {
+    const opts = typeof targetOrOpts === "string" ? { to: targetOrOpts } : (targetOrOpts || {});
+
+    const recipient = cleanEnv(
+      opts.to ||
       process.env.INQUIRY_NOTIFICATION_EMAIL ||
       process.env.QUOTE_NOTIFICATION_EMAIL ||
       process.env.MAIL_FROM_ADDRESS ||
-      "info@sumiraj.com";
+      "info@sumiraj.com"
+    );
 
-    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    const host = cleanEnv(opts.host || process.env.SMTP_HOST || "");
+    const user = cleanEnv(opts.user || process.env.SMTP_USER || "");
+    const pass = cleanEnv(opts.pass || process.env.SMTP_PASS || "");
+
+    if (!host || !user || !pass) {
       throw new Error(
         "Missing SMTP credentials in environment variables! Check SMTP_HOST, SMTP_USER, and SMTP_PASS in Vercel settings."
       );
@@ -111,11 +144,11 @@ class MailService {
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
           <tr style="background-color: #f7fafc;">
             <td style="padding: 8px 12px; border: 1px solid #e2e8f0; font-weight: bold; width: 35%;">SMTP Host:</td>
-            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${process.env.SMTP_HOST}</td>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${host}</td>
           </tr>
           <tr>
             <td style="padding: 8px 12px; border: 1px solid #e2e8f0; font-weight: bold;">SMTP User:</td>
-            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${process.env.SMTP_USER}</td>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${user}</td>
           </tr>
           <tr style="background-color: #f7fafc;">
             <td style="padding: 8px 12px; border: 1px solid #e2e8f0; font-weight: bold;">Recipient Inbox:</td>
@@ -131,11 +164,11 @@ class MailService {
       </div>
     `;
 
-    const transporter = getTransporter();
-    // Test the SMTP handshake first
+    const transporter = getTransporter(opts);
+    // Test the SMTP handshake and login
     await transporter.verify();
 
-    const info = await this.sendMail({ to: recipient, subject, html });
+    const info = await this.sendMail({ to: recipient, subject, html }, opts);
     if (!info) {
       throw new Error("Transporter verified, but sending test email failed. Check server logs for details.");
     }
@@ -144,7 +177,7 @@ class MailService {
       success: true,
       recipient,
       messageId: info.messageId,
-      smtpHost: process.env.SMTP_HOST
+      smtpHost: host
     };
   }
 
@@ -318,63 +351,75 @@ class MailService {
 
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 650px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff;">
-        <div style="text-align: center; border-bottom: 2px solid #ff5722; padding-bottom: 16px; margin-bottom: 20px;">
-          <h2 style="color: #ff5722; margin: 0; font-size: 22px;">New Project Inquiry Received</h2>
-          <p style="color: #718096; margin: 6px 0 0; font-size: 14px;">Sumiraj Official Website Contact Form</p>
+        <div style="text-align: center; border-bottom: 3px solid #ff5722; padding-bottom: 16px; margin-bottom: 20px;">
+          <h2 style="color: #1a202c; margin: 0; font-size: 22px;">New Inquiry Received</h2>
+          <p style="color: #ff5722; font-weight: bold; margin: 6px 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+            ${projectTypeDisplay}
+          </p>
         </div>
 
-        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-          <tr style="background-color: #f8fafc;">
+        <p style="color: #4a5568; font-size: 14px; line-height: 1.5; margin-bottom: 18px;">
+          A new business enquiry has been submitted on the Sumiraj website. Full details are listed below:
+        </p>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
+          <tr style="background-color: #f7fafc;">
             <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; width: 35%; color: #4a5568;">Full Name:</td>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c; font-weight: 600;">${enquiry.fullName || 'N/A'}</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c; font-weight: 600;">${enquiry.fullName || "N/A"}</td>
           </tr>
+          ${enquiry.company ? `
           <tr>
             <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Company:</td>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">${enquiry.company || 'N/A'}</td>
-          </tr>
-          <tr style="background-color: #f8fafc;">
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Email:</td>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">
-              <a href="mailto:${enquiry.email}" style="color: #0056b3; text-decoration: none; font-weight: 600;">${enquiry.email}</a>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">${enquiry.company}</td>
+          </tr>` : ""}
+          <tr style="background-color: #f7fafc;">
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Email Address:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0;">
+              <a href="mailto:${enquiry.email}" style="color: #ff5722; text-decoration: none; font-weight: bold;">${enquiry.email || "N/A"}</a>
             </td>
           </tr>
           <tr>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Mobile Number:</td>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">
-              <a href="tel:${enquiry.mobile}" style="color: #0056b3; text-decoration: none; font-weight: 600;">${enquiry.mobile}</a>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Phone / Mobile:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0;">
+              <a href="tel:${enquiry.mobile}" style="color: #ff5722; text-decoration: none; font-weight: bold;">${enquiry.mobile || "N/A"}</a>
             </td>
           </tr>
-          <tr style="background-color: #f8fafc;">
+          ${(enquiry.projectLocation || enquiry.sourceLocation) ? `
+          <tr style="background-color: #f7fafc;">
             <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Project Location:</td>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">${enquiry.projectLocation || enquiry.destinationLocation || enquiry.sourceLocation || 'N/A'}</td>
-          </tr>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">${enquiry.projectLocation || enquiry.sourceLocation}</td>
+          </tr>` : ""}
+          ${(enquiry.approximateArea || enquiry.shipmentWeight) ? `
           <tr>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Approximate Area:</td>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c;">${enquiry.approximateArea || enquiry.shipmentWeight || 'N/A'}</td>
-          </tr>
-          <tr style="background-color: #f8fafc;">
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Project Type:</td>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #ff5722; font-weight: 600;">${enquiry.projectType || enquiry.enquiryType || 'Pre-Engineered Buildings (PEB)'}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568; vertical-align: top;">Specification / Message:</td>
-            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #2d3748; line-height: 1.5; white-space: pre-wrap;">${enquiry.specification || enquiry.message || 'N/A'}</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Approx. Floor Area:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a202c; font-weight: 600;">${enquiry.approximateArea || enquiry.shipmentWeight}</td>
+          </tr>` : ""}
+          <tr style="background-color: #f7fafc;">
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #4a5568;">Submission Date:</td>
+            <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #718096;">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST</td>
           </tr>
         </table>
 
+        ${(enquiry.specification || enquiry.message) ? `
+        <div style="margin-top: 15px; margin-bottom: 20px;">
+          <h3 style="color: #1a202c; margin-bottom: 8px; font-size: 15px;">Project Specifications & Requirements:</h3>
+          <div style="padding: 14px; background-color: #f7fafc; border-left: 4px solid #ff5722; border-radius: 4px; color: #2d3748; line-height: 1.6; font-size: 14px; white-space: pre-wrap;">${enquiry.specification || enquiry.message}</div>
+        </div>` : ""}
+
         ${attachmentsHtml}
 
-        <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #e2e8f0; text-align: center; color: #a0aec0; font-size: 12px;">
-          <p style="margin: 0;">This email was automatically generated by Sumiraj System.</p>
+        <div style="margin-top: 30px; padding-top: 18px; border-top: 1px solid #e2e8f0; text-align: center; color: #a0aec0; font-size: 12px;">
+          This automated lead notification was generated by the Sumiraj web platform.
         </div>
       </div>
     `;
 
-    const recipient =
+    const recipient = cleanEnv(
       process.env.INQUIRY_NOTIFICATION_EMAIL ||
       process.env.QUOTE_NOTIFICATION_EMAIL ||
       process.env.MAIL_FROM_ADDRESS ||
-      "info@sumiraj.com";
+      "info@sumiraj.com"
+    );
 
     // Send email with file attachments, fallback to body links if attachment size exceeds limits
     let info = await this.sendMail({
