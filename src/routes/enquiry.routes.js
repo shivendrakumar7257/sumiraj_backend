@@ -4,6 +4,7 @@ const authMiddleware = require("../middlewares/auth.middleware");
 const adminMiddleware = require("../middlewares/admin.middleware");
 const validate = require("../middlewares/validate.middleware");
 const upload = require("../middlewares/multer.middleware");
+const enquiryUpload = upload.enquiryUpload || upload;
 const ApiError = require("../utils/ApiError");
 const {
   createEnquiryRules,
@@ -15,11 +16,12 @@ const router = express.Router();
 /**
  * Flexible middleware: handles multipart/form-data file uploads (if sent)
  * before running express-validator rules. Allows both JSON and multipart/form-data.
+ * Enforces maximum 10 files and 10 MB limit per file, restricted to JPG, JPEG, PNG, WEBP, and PDF.
  */
 const handleEnquiryUpload = (req, res, next) => {
   const contentType = req.headers["content-type"] || "";
   if (contentType.toLowerCase().includes("multipart/form-data")) {
-    return upload.any()(req, res, (err) => {
+    return enquiryUpload.any()(req, res, (err) => {
       if (err) {
         if (err.name === "MulterError") {
           if (err.code === "LIMIT_FILE_SIZE") {
@@ -27,7 +29,7 @@ const handleEnquiryUpload = (req, res, next) => {
               new ApiError(400, "Validation Failed: File size exceeds the 10 MB limit per file.")
             );
           }
-          if (err.code === "LIMIT_FILE_COUNT") {
+          if (err.code === "LIMIT_FILE_COUNT" || err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new ApiError(400, "Validation Failed: Too many files uploaded. Maximum 10 files allowed.")
             );
@@ -36,6 +38,13 @@ const handleEnquiryUpload = (req, res, next) => {
         }
         return next(new ApiError(400, err.message));
       }
+
+      if (req.files && req.files.length > 10) {
+        return next(
+          new ApiError(400, "Validation Failed: Too many files uploaded. Maximum 10 files allowed.")
+        );
+      }
+
       next();
     });
   }
@@ -58,6 +67,18 @@ router.post("/test-email", enquiryController.testEmail);
 // Admin Protected Routes: Retrieve and manage enquiries
 router.get("/", authMiddleware, adminMiddleware, enquiryController.getAll);
 router.get("/:id", authMiddleware, adminMiddleware, enquiryController.getById);
+router.get(
+  "/:id/attachments/:filename",
+  authMiddleware,
+  adminMiddleware,
+  enquiryController.downloadAttachment
+);
+router.get(
+  "/:id/attachments",
+  authMiddleware,
+  adminMiddleware,
+  enquiryController.downloadAttachment
+);
 router.patch(
   "/:id/status",
   authMiddleware,

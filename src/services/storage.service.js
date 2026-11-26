@@ -43,7 +43,7 @@ class StorageService {
         };
       } catch (error) {
         console.error("Vercel Blob Upload Failed:", error);
-        throw new ApiError(500, `Image upload to Vercel Blob failed: ${error.message}`);
+        throw new ApiError(500, `File upload to Vercel Blob failed: ${error.message}`);
       }
     } else {
       // Local development fallback to /public/uploads
