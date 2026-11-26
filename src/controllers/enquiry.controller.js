@@ -301,6 +301,41 @@ class EnquiryController {
       });
     }
   };
+
+  /**
+   * Diagnostic endpoint to test Vercel Blob storage configuration directly.
+   * Useful to verify BLOB_READ_WRITE_TOKEN in production on Vercel without submitting an enquiry.
+   */
+  testStorage = async (req, res, next) => {
+    try {
+      const overrideToken = req.query?.token || req.body?.token;
+      const status = await storageService.testStorageConnection(overrideToken);
+      return res
+        .status(200)
+        .json(new ApiResponse(200, status, "Storage diagnostic check passed successfully"));
+    } catch (error) {
+      const isProd = storageService.isProductionEnvironment();
+      const token = storageService.getBlobToken();
+      const cwd = typeof process.cwd === "function" ? process.cwd() : "unknown";
+
+      return res.status(500).json({
+        success: false,
+        message: "Storage configuration check failed: " + error.message,
+        error: error.message,
+        storageConfigStatus: {
+          isProductionDetected: isProd,
+          BLOB_READ_WRITE_TOKEN: token ? "CONFIGURED (hidden)" : "MISSING",
+          currentWorkingDirectory: cwd,
+          VERCEL_FLAG: process.env.VERCEL || "MISSING",
+          VERCEL_ENV: process.env.VERCEL_ENV || "MISSING",
+          NODE_ENV: process.env.NODE_ENV || "MISSING"
+        },
+        troubleshooting: token
+          ? "The BLOB_READ_WRITE_TOKEN is configured but failed to connect to Vercel Blob. Please verify the token is active in Vercel Storage settings."
+          : "BLOB_READ_WRITE_TOKEN is MISSING in Vercel. In Vercel Dashboard -> Your Project -> Storage -> Connect Vercel Blob store, or add BLOB_READ_WRITE_TOKEN under Settings -> Environment Variables, then redeploy."
+      });
+    }
+  };
 }
 
 module.exports = new EnquiryController();

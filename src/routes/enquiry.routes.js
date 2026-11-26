@@ -64,6 +64,10 @@ router.post(
 router.get("/test-email", enquiryController.testEmail);
 router.post("/test-email", enquiryController.testEmail);
 
+// Diagnostic route: Test storage / Vercel Blob connection (Public / Debugging)
+router.get("/test-storage", enquiryController.testStorage);
+router.post("/test-storage", enquiryController.testStorage);
+
 // Admin Protected Routes: Retrieve and manage enquiries
 router.get("/", authMiddleware, adminMiddleware, enquiryController.getAll);
 router.get("/:id", authMiddleware, adminMiddleware, enquiryController.getById);
