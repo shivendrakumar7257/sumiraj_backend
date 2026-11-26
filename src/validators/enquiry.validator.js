@@ -52,7 +52,7 @@ const createEnquiryRules = [
     return true;
   }),
   body("attachments")
-    .optional()
+    .optional({ checkFalsy: true })
     .custom((value) => {
       if (typeof value === "string") {
         try {

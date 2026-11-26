@@ -1,3 +1,5 @@
+const path = require("path");
+const fs = require("fs");
 const enquiryService = require("../services/enquiry.service");
 const storageService = require("../services/storage.service");
 const ApiResponse = require("../utils/ApiResponse");
@@ -8,18 +10,31 @@ class EnquiryController {
    * Submit a new business / quote enquiry with support for file attachments.
    */
   create = async (req, res, next) => {
+    const uploadedFilesToCleanup = [];
     try {
       const attachments = [];
 
       // 1. Process files uploaded directly via multipart/form-data
       if (req.files && req.files.length > 0) {
-        const uploadPromises = req.files.map((file) =>
-          storageService.uploadFile(file, "uploads/enquiries")
-        );
-        const uploadedResults = await Promise.all(uploadPromises);
+        if (req.files.length > 10) {
+          throw new ApiError(
+            400,
+            "Validation Failed: Too many files uploaded. Maximum 10 files allowed."
+          );
+        }
 
-        uploadedResults.forEach((result, idx) => {
-          const file = req.files[idx];
+        // Upload files with tracking for cleanup on failure
+        for (const file of req.files) {
+          if (file.size > 10 * 1024 * 1024) {
+            throw new ApiError(
+              400,
+              `Validation Failed: File '${file.originalname}' exceeds the 10 MB limit per file.`
+            );
+          }
+
+          const result = await storageService.uploadFile(file, "uploads/enquiries");
+          uploadedFilesToCleanup.push(result.url);
+
           attachments.push({
             url: result.url,
             pathname: result.pathname,
@@ -27,33 +42,53 @@ class EnquiryController {
             mimetype: file.mimetype,
             size: file.size
           });
-        });
+        }
       }
 
       // 2. Process attachments passed in req.body (e.g. JSON array or pre-uploaded URLs)
       if (req.body.attachments) {
         let existingAttachments = req.body.attachments;
         if (typeof existingAttachments === "string") {
-          try {
-            existingAttachments = JSON.parse(existingAttachments);
-          } catch (e) {
-            existingAttachments = [existingAttachments];
+          const trimmed = existingAttachments.trim();
+          if (
+            trimmed === "" ||
+            trimmed === "undefined" ||
+            trimmed === "null" ||
+            trimmed.startsWith("[object ")
+          ) {
+            existingAttachments = null;
+          } else {
+            try {
+              existingAttachments = JSON.parse(trimmed);
+            } catch (e) {
+              existingAttachments = [trimmed];
+            }
           }
         }
 
         if (Array.isArray(existingAttachments)) {
           existingAttachments.forEach((att) => {
-            if (typeof att === "string" && att.trim()) {
+            if (
+              typeof att === "string" &&
+              att.trim() &&
+              !att.startsWith("[object ") &&
+              att !== "undefined" &&
+              att !== "null"
+            ) {
+              const urlTrimmed = att.trim();
               attachments.push({
-                url: att.trim(),
-                originalname: att.split("/").pop() || "document",
-                mimetype: att.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+                url: urlTrimmed,
+                pathname: path.basename(urlTrimmed),
+                originalname: urlTrimmed.split("/").pop() || "document",
+                mimetype: urlTrimmed.toLowerCase().endsWith(".pdf")
+                  ? "application/pdf"
+                  : "image/jpeg",
                 size: 0
               });
             } else if (att && typeof att === "object" && att.url) {
               attachments.push({
                 url: att.url,
-                pathname: att.pathname || "",
+                pathname: att.pathname || path.basename(att.url) || "",
                 originalname: att.originalname || att.url.split("/").pop() || "document",
                 mimetype: att.mimetype || "",
                 size: att.size || 0
@@ -61,6 +96,14 @@ class EnquiryController {
             }
           });
         }
+      }
+
+      // Enforce total max files limit
+      if (attachments.length > 10) {
+        throw new ApiError(
+          400,
+          "Validation Failed: Too many files uploaded. Maximum 10 files allowed."
+        );
       }
 
       const enquiryData = {
@@ -75,6 +118,12 @@ class EnquiryController {
         .status(201)
         .json(new ApiResponse(201, enquiry, "Enquiry submitted successfully"));
     } catch (error) {
+      // Clean up any files that were uploaded to storage during this failed request
+      if (uploadedFilesToCleanup.length > 0) {
+        await Promise.allSettled(
+          uploadedFilesToCleanup.map((url) => storageService.deleteFile(url))
+        );
+      }
       next(error);
     }
   };
@@ -139,6 +188,66 @@ class EnquiryController {
       return res
         .status(200)
         .json(new ApiResponse(200, null, "Enquiry deleted successfully"));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Securely view or download an attachment belonging to an enquiry (Admin).
+   */
+  downloadAttachment = async (req, res, next) => {
+    try {
+      const { id, filename } = req.params;
+      const { download } = req.query;
+
+      const enquiry = await enquiryService.getEnquiryById(id);
+      if (!enquiry) {
+        throw new ApiError(404, "Enquiry not found");
+      }
+
+      if (!enquiry.attachments || enquiry.attachments.length === 0) {
+        throw new ApiError(404, "No attachments found for this enquiry");
+      }
+
+      let attachment;
+      if (filename) {
+        const decoded = decodeURIComponent(filename);
+        attachment = enquiry.attachments.find(
+          (att) =>
+            att.pathname === decoded ||
+            path.basename(att.url) === decoded ||
+            att.originalname === decoded
+        );
+      } else {
+        attachment = enquiry.attachments[0];
+      }
+
+      if (!attachment) {
+        throw new ApiError(404, "Requested attachment not found");
+      }
+
+      // If stored on external cloud storage (e.g. Vercel Blob), redirect securely
+      if (attachment.url.startsWith("http://") || attachment.url.startsWith("https://")) {
+        return res.redirect(attachment.url);
+      }
+
+      // If stored locally on disk
+      const localFilename = path.basename(attachment.url);
+      const filePath = path.join(process.cwd(), "public", "uploads", localFilename);
+
+      if (!fs.existsSync(filePath)) {
+        throw new ApiError(404, "Attachment file not found on disk");
+      }
+
+      const disposition = download === "true" || download === "1" ? "attachment" : "inline";
+      res.setHeader("Content-Type", attachment.mimetype || "application/octet-stream");
+      res.setHeader(
+        "Content-Disposition",
+        `${disposition}; filename="${encodeURIComponent(attachment.originalname || localFilename)}"`
+      );
+
+      return res.sendFile(filePath);
     } catch (error) {
       next(error);
     }
